@@ -66,6 +66,10 @@ export const rotateAssembler: IAssembler = {
         if (renderData && frame) {
             if (renderData.vertDirty) {
                 this.updateVertexData(sprite);
+                this.updateRotateSpeed(sprite);
+                this.updateRotateCenter(sprite);
+                this.updateaClockwise(sprite);
+                this.updateaDistort(sprite);
             }
             renderData.updateRenderData(sprite, frame);
         }
@@ -106,6 +110,10 @@ export const rotateAssembler: IAssembler = {
         if (sprite.node.hasChangedFlags || renderData.vertDirty) {
             // const vb = chunk.vertexAccessor.getVertexBuffer(chunk.bufferId);
             this.updateWorldVerts(sprite, chunk);
+            this.updateRotateSpeed(sprite);
+            this.updateRotateCenter(sprite);
+            this.updateaClockwise(sprite);
+            this.updateaDistort(sprite);
             renderData.vertDirty = false;
         }
 
