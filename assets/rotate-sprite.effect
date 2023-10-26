@@ -77,11 +77,6 @@ CCProgram sprite-vs %{
     clockwise = a_clockwise;
     distort = a_distort;
 
-    rotateSpeed = 0.5;
-    rotateCenter = vec2(0.5);
-    clockwise = -1.0;
-    distort = 1.0;
-
     return pos;
   }
 }%
@@ -200,7 +195,6 @@ CCProgram sprite-fs %{
       vec2 dirRotated = rotateVector(dir, rotateRad);
       farFitPoint = findFarthestFittingPoint(dirRotated, rotateCenter);
       vec2 uvRotated = rotateCenter + (farFitPoint - rotateCenter) * easeInCirc(percent);
-
       o *= CCSampleWithAlphaSeparated(cc_spriteTexture, uvRotated);
       #if IS_GRAY
         float gray  = 0.2126 * o.r + 0.7152 * o.g + 0.0722 * o.b;
