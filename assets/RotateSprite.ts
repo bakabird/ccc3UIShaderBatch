@@ -111,12 +111,6 @@ export class RotateSprite extends Sprite {
                 if (this.spriteFrame) {
                     this._assembler.updateUVs(this);
                 }
-                console.log("render with new property....")
-                // print the property
-                console.log(this._rotateSpeed)
-                console.log(this._rotateCenter)
-                console.log(this._isClockWise)
-                console.log(this._distort)
                 this._updateColor();
                 this._updateRotateSpeed()
                 this._updateRotateCenter()

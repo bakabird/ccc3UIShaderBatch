@@ -1,0 +1,205 @@
+// Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: sprite-vs:vert
+      frag: sprite-fs:frag
+      depthStencilState:
+        depthTest: false
+        depthWrite: false
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendDstAlpha: one_minus_src_alpha
+      rasterizerState:
+        cullMode: none
+      properties:
+        alphaThreshold: { value: 0.5 }
+        rotateSpeed: { value: 1.0, target: Speed_CenterXY_Clockwise.x }
+        rotateCenter: { value: [0.5, 0.5], target: Speed_CenterXY_Clockwise.yz }
+        clockwise: { value: 1.0, target: Speed_CenterXY_Clockwise.w }
+}%
+
+CCProgram shared-ubos %{
+  uniform Constants {
+    vec4 Speed_CenterXY_Clockwise;
+  }; 
+}%  
+
+
+CCProgram sprite-vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #if USE_LOCAL
+    #include <builtin/uniforms/cc-local>
+  #endif
+  #if SAMPLE_FROM_RT
+    #include <common/common-define>
+  #endif
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec4 a_color;
+
+  out vec4 color;
+  out vec2 uv0;
+
+  vec4 vert () {
+    vec4 pos = vec4(a_position, 1);
+
+    #if USE_LOCAL
+      pos = cc_matWorld * pos;
+    #endif
+
+    #if USE_PIXEL_ALIGNMENT
+      pos = cc_matView * pos;
+      pos.xyz = floor(pos.xyz);
+      pos = cc_matProj * pos;
+    #else
+      pos = cc_matViewProj * pos;
+    #endif
+
+    uv0 = a_texCoord;
+    #if SAMPLE_FROM_RT
+      CC_HANDLE_RT_SAMPLE_FLIP(uv0);
+    #endif
+    color = a_color;
+
+    return pos;
+  }
+}%
+
+CCProgram sprite-fs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #include <builtin/internal/embedded-alpha>
+  #include <builtin/internal/alpha-test>
+  #include <shared-ubos>
+
+  in vec4 color;
+
+  #define PI 3.1415926535897932384626433832795
+  #define SQRT2 1.4142135623730950488016887242097
+  #define MOD(a, b) a - b * floor(a / b)
+
+  #if USE_TEXTURE
+    in vec2 uv0;
+    #pragma builtin(local)
+    layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+  #endif
+
+  float yOflineOnX(float k, float b, float x) {
+    return k * x + b;
+  }
+
+  float xOflineOnY(float k, float b, float y) {
+    return (y - b) / k;
+  }
+
+  bool isBetween(float value, float min, float max) {
+    return value >= min && value <= max;
+  }
+
+  vec2 findFarthestFittingPoint(vec2 dir, vec2 rotateCenter) {
+    vec2 farFitPoint = vec2(0.0);
+    float len4fit = 0.0;
+    float xSign = sign(dir.x);
+    float slope = dir.y / (xSign * max(abs(dir.x), 0.00000001));
+    slope = clamp(slope, -9999999999.9, 9999999999.9);
+    float yIntercept = rotateCenter.y - slope * rotateCenter.x;
+    yIntercept = clamp(yIntercept, -9999999999.9, 9999999999.9);
+    
+    vec2 checkVal = vec2(0.0, yOflineOnX(slope, yIntercept, 0.0));
+    vec2 check2center = checkVal - rotateCenter;
+    if (isBetween(checkVal.y, 0.0, 1.0) && dot(dir, check2center) > 0.0) {
+      farFitPoint = checkVal;
+      len4fit = length(check2center);
+    }
+    checkVal = vec2(1.0, yOflineOnX(slope, yIntercept, 1.0));
+    check2center = checkVal - rotateCenter;
+    float len4check = length(check2center);
+    if (isBetween(checkVal.y, 0.0, 1.0) && dot(dir, check2center) > 0.0 && len4check > len4fit) {
+      farFitPoint = checkVal;
+      len4fit = len4check;
+    }
+    checkVal = vec2(xOflineOnY(slope, yIntercept, 0.0), 0.0);
+    check2center = checkVal - rotateCenter;
+    len4check = length(check2center);
+    if (isBetween(checkVal.x, 0.0, 1.0) && dot(dir, check2center) > 0.0 && len4check > len4fit) {
+      farFitPoint = checkVal;
+      len4fit = len4check;
+    }
+    checkVal = vec2(xOflineOnY(slope, yIntercept, 1.0), 1.0);
+    check2center = checkVal - rotateCenter;
+    len4check = length(check2center);
+    if (isBetween(checkVal.x, 0.0, 1.0) && dot(dir, check2center) > 0.0 && len4check > len4fit) {
+      farFitPoint = checkVal;
+      len4fit = len4check;
+    }
+    return farFitPoint;
+  }
+
+  vec2 rotateVector(vec2 vec, float angle) {
+    return vec2(
+      vec.x * cos(angle) - vec.y * sin(angle),
+      vec.x * sin(angle) + vec.y * cos(angle)
+    );
+  }
+
+  float easeOutBounce(float x){
+    float n1 = 7.5625 * 1.0;
+    float d1 = 2.75;
+
+    if (x < 1.0 / d1) {
+        return n1 * x * x;
+    } else if (x < 2.0 / d1) {
+        return n1 * (x -= 1.5 / d1) * x + 0.75;
+    } else if (x < 2.5 / d1) {
+        return n1 * (x -= 2.25 / d1) * x + 0.9375;
+    } else {
+        return n1 * (x -= 2.625 / d1) * x + 0.984375;
+    }
+  }
+
+  float easeInCirc(float x) {
+    return 1.0 - sqrt(1.0 - pow(x, 2.0 * 1.0));
+  }
+
+  vec4 frag () {
+    vec4 o = vec4(1.0);
+
+    #if USE_TEXTURE
+      float rotateSpeed = Speed_CenterXY_Clockwise.x;
+      vec2 rotateCenter = Speed_CenterXY_Clockwise.yz;
+      float clockwise = Speed_CenterXY_Clockwise.w;
+
+      float rotateRad = sign(clockwise) * cc_time.x * PI * rotateSpeed;
+
+      // uv 转换，变成一个旋转了45°矩形
+      vec2 uv2center = uv0 - vec2(0.5);
+      uv2center = rotateVector(uv2center, PI / 4.0);
+      uv2center /= SQRT2;
+      vec2 uv0Rotated = uv2center + vec2(0.5);
+
+      // 通过 uv转换 来实现旋转
+      vec2 dir = uv0Rotated - rotateCenter;
+      // vec2 farFitPoint = findFarthestFittingPoint(dir, rotateCenter);
+      // float percent = length(dir) / length(farFitPoint - rotateCenter);
+      vec2 dirRotated = rotateVector(dir, rotateRad);
+      // farFitPoint = findFarthestFittingPoint(dirRotated, rotateCenter);
+      vec2 uvRotated = rotateCenter + dirRotated;
+
+      o *= CCSampleWithAlphaSeparated(cc_spriteTexture, uvRotated);
+      
+      #if IS_GRAY
+        float gray  = 0.2126 * o.r + 0.7152 * o.g + 0.0722 * o.b;
+        o.r = o.g = o.b = gray;
+      #endif
+    #endif
+
+    o *= color;
+    ALPHA_TEST(o);
+    return o;
+  }
+}%
